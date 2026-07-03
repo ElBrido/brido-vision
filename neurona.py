@@ -1042,35 +1042,36 @@ def main():
     # ── 5. Fase 0: Fusión Semántica en Memoria ────────────────────────
     print("\n[v10.1] ══ FASE 0: Fusión Semántica en Memoria (TURBO) ══")
     unique_texts = list(set(all_prompts[:20000]))
-    print(f"  → Ejecutando CLIP batch sobre {len(unique_texts):,} textos únicos...")
-    unique_vecs = text_enc.encode_batch(unique_texts)
-    txt_vec_map = {t: unique_vecs[k] for k, t in enumerate(unique_texts)}
+    if len(all_imgs) > 0 and len(unique_texts) > 0:
+        print(f"  → Ejecutando CLIP batch sobre {len(unique_texts):,} textos únicos...")
+        unique_vecs = text_enc.encode_batch(unique_texts)
+        txt_vec_map = {t: unique_vecs[k] for k, t in enumerate(unique_texts)}
 
-    t0_mem = time.time()
-    n_cores = os.cpu_count() or 4
+        t0_mem = time.time()
+        n_cores = os.cpu_count() or 4
 
-    from concurrent.futures import ThreadPoolExecutor
-    def _encode_img(args):
-        img_128, txt_vec = args
-        img_32 = np.array(Image.fromarray(img_128).resize((32,32), Image.BILINEAR))
-        enc = encoder.encode_image(img_32)
-        result = {}
-        for s, vec_mat in enc.items():
-            fused_vecs = (vec_mat ^ txt_vec).reshape(-1, D_BYTES)
-            patches_rgb = encoder.extract_patches_rgb(img_32, s, PATCH_OUT)
-            result[s] = (fused_vecs, patches_rgb)
-        return result
+        from concurrent.futures import ThreadPoolExecutor
+        def _encode_img(args):
+            img_128, txt_vec = args
+            img_32 = np.array(Image.fromarray(img_128).resize((32,32), Image.BILINEAR))
+            enc = encoder.encode_image(img_32)
+            result = {}
+            for s, vec_mat in enc.items():
+                fused_vecs = (vec_mat ^ txt_vec).reshape(-1, D_BYTES)
+                patches_rgb = encoder.extract_patches_rgb(img_32, s, PATCH_OUT)
+                result[s] = (fused_vecs, patches_rgb)
+            return result
 
-    limit = min(20000, len(all_imgs))
-    batch_args = [(all_imgs[k], txt_vec_map[all_prompts[k]]) for k in range(limit)]
+        limit = min(20000, len(all_imgs))
+        batch_args = [(all_imgs[k], txt_vec_map[all_prompts[k]]) for k in range(limit)]
 
-    with ThreadPoolExecutor(max_workers=n_cores) as ex:
-        for result in ex.map(_encode_img, batch_args):
-            for s, (fused_vecs, patches_rgb) in result.items():
-                if memory_bank[s]._n < memory_bank[s].max_n:
-                    memory_bank[s].add_batch(fused_vecs, patches_rgb)
+        with ThreadPoolExecutor(max_workers=n_cores) as ex:
+            for result in ex.map(_encode_img, batch_args):
+                for s, (fused_vecs, patches_rgb) in result.items():
+                    if memory_bank[s]._n < memory_bank[s].max_n:
+                        memory_bank[s].add_batch(fused_vecs, patches_rgb)
 
-    print(f"[v10.1] ¡Memoria Construida! Prototipos totales: {sum(m.get_count() for m in memory_bank.values()):,}")
+        print(f"[v10.1] ¡Memoria Construida! Prototipos totales: {sum(m.get_count() for m in memory_bank.values()):,}")
 
     print("\n[v10.1] ══ FASE 1: Entrenando SmoothDecoder (LITE) ══")
 
