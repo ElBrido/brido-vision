@@ -806,7 +806,9 @@ def train_smooth_decoder(model, dataset, epochs=SMOOTH_EPOCHS,
     opt  = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
 
     # ⚡ ONE-CYCLE LEARNING RATE: Convergencia x3 mas rapida
-    sched = optim.lr_scheduler.OneCycleLR(opt, max_lr=lr*5, steps_per_epoch=len(loader), epochs=epochs)
+    steps = (len(loader) + grad_accum - 1) // grad_accum
+    if steps == 0: steps = 1
+    sched = optim.lr_scheduler.OneCycleLR(opt, max_lr=lr*5, steps_per_epoch=steps, epochs=epochs)
 
     loss_fn = CombinedLoss()
     model.train()
@@ -827,7 +829,7 @@ def train_smooth_decoder(model, dataset, epochs=SMOOTH_EPOCHS,
                 nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
                 opt.zero_grad(set_to_none=True)
-            sched.step() # Step en cada iteracion real, independientemente del grad_accum
+                sched.step()
 
             total += loss.item() * grad_accum
 
@@ -846,7 +848,9 @@ def train_esrgan(model, dataset, epochs=ESRGAN_EPOCHS,
     loader = DataLoader(dataset, batch_size=max(4, BATCH_SIZE//4), shuffle=True,
                         num_workers=0, pin_memory=False)
     opt  = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    sched = optim.lr_scheduler.OneCycleLR(opt, max_lr=lr*3, steps_per_epoch=len(loader), epochs=epochs)
+    steps = (len(loader) + grad_accum - 1) // grad_accum
+    if steps == 0: steps = 1
+    sched = optim.lr_scheduler.OneCycleLR(opt, max_lr=lr*3, steps_per_epoch=steps, epochs=epochs)
     loss_fn = CombinedLoss(l1_w=0.8, ssim_w=0.2)
     model.train()
 
@@ -865,7 +869,7 @@ def train_esrgan(model, dataset, epochs=ESRGAN_EPOCHS,
                 nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
                 opt.zero_grad(set_to_none=True)
-            sched.step()
+                sched.step()
 
             total += loss.item() * grad_accum
 
@@ -969,10 +973,10 @@ def main():
     encoder = VectorizedEncoder(basis)
 
     memory_bank = {
-        32: ResonantMemory(max_n=1000),
-        16: ResonantMemory(max_n=1000),
-        8:  ResonantMemory(max_n=1000),
-        4:  ResonantMemory(max_n=1000),
+        32: ResonantMemory(max_n=50000),
+        16: ResonantMemory(max_n=50000),
+        8:  ResonantMemory(max_n=50000),
+        4:  ResonantMemory(max_n=50000),
     }
 
     all_imgs = []
